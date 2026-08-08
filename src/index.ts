@@ -1,8 +1,12 @@
-import {sql} from "./db";
+import { migrate } from "./migrate";
 
 async function main() {
- const result = await sql`SELECT 1 AS connected`;
- console.log(result);
+  await migrate();
+
+  console.log("Log Ingestion Service");
 }
 
-main();
+main().catch((error) => {
+  console.error("Application failed to start:", error);
+  process.exit(1);
+});

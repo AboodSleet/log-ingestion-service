@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { sql } from "./db";
 
-async function migrate() {
+export async function migrate() {
   await sql`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       name TEXT PRIMARY KEY,
@@ -51,10 +51,5 @@ async function migrate() {
     console.log(`Applied migration: ${migrationName}`);
   }
 
-  await sql.end();
 }
 
-migrate().catch((error) => {
-  console.error("Migration failed:", error);
-  process.exit(1);
-});
