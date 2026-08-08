@@ -16,5 +16,8 @@
     "@types/node": "^26.1.2",
     "tsx": "^4.23.11",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "postgres": "^3.4.9"
   }
 }
