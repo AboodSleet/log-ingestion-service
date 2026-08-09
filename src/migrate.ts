@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { sql } from "./db";
+import { sql } from "./db.js";
 
 export async function migrate() {
   await sql`

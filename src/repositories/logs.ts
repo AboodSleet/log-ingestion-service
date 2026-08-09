@@ -1,5 +1,6 @@
-import { sql } from "../db";
-import type { LogEntry } from "../types/log";
+import { sql } from "../db.js";
+import type { LogEntry } from "../types/log.js";
+
 
 export async function insertLogs(logs: LogEntry[]) {
   if (logs.length === 0) {

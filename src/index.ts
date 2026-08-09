@@ -1,7 +1,8 @@
 import { createServer } from "node:http";
-import { migrate  } from "./migrate";
-import { validateLog } from "./validation/logs";
-import { insertLogs } from "./repositories/logs";
+import { migrate } from "./migrate.js";
+import { validateLog } from "./validation/logs.js";
+import { insertLogs } from "./repositories/logs.js";
+
 
 const PORT = 8080;
 
