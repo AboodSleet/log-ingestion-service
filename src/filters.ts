@@ -6,6 +6,8 @@ export type LogFilters = {
   since?: Date;
   until?: Date;
   query?: string;
+  limit?: number;
+  cursor?: string;
   attributes: Record<string, string>;
 };
 
@@ -39,6 +41,17 @@ export function parseFilters(
   const query = searchParams.get("q");
   if (query !== null) {
     filters.query = query;
+  }
+
+  const limitValue = searchParams.get("limit");
+  const cursor = searchParams.get("cursor");
+
+  if (limitValue !== null) {
+    filters.limit = Number(limitValue);
+  }
+
+  if (cursor !== null) {
+    filters.cursor = cursor;
   }
 
   for (const [key, value] of searchParams.entries()) {
