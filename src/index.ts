@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { migrate } from "./migrate.js";
 import { validateLog } from "./validation/logs.js";
-import { insertLogs } from "./repositories/logs.js";
+import { insertLogs, listLogs } from "./repositories/logs.js";
 
 
 const PORT = 8080;
@@ -18,6 +18,14 @@ async function main() {
 
     if (req.method === "POST" && req.url === "/logs") {
       await handleIngestLogs(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/logs") {
+      const logs = await listLogs(100);
+
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ logs }));
       return;
     }
 
