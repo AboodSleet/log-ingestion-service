@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { migrate } from "./migrate.js";
 import { validateLog } from "./validation/logs.js";
 import { insertLogs, listLogs } from "./repositories/logs.js";
-
+import { encodeCursor, decodeCursor, } from "./pagination/cursor.js";
 
 const PORT = 8080;
 
@@ -21,13 +21,84 @@ async function main() {
       return;
     }
 
-    if (req.method === "GET" && req.url === "/logs") {
-      const logs = await listLogs(100);
+  if (req.method === "GET" && req.url) {
+    const url = new URL(req.url, `http://${req.headers.host}`);
 
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ logs }));
+  if (url.pathname === "/logs") {
+    const limitValue = url.searchParams.get("limit");
+    const cursorValue = url.searchParams.get("cursor");
+
+    const limit =
+      limitValue === null ? 100 : Number(limitValue);
+
+    if (
+      !Number.isInteger(limit) ||
+      limit < 1 ||
+      limit > 1000
+    ) {
+      res.writeHead(400, {
+        "Content-Type": "application/json",
+      });
+
+      res.end(
+        JSON.stringify({
+          error: "limit must be an integer between 1 and 1000",
+        }),
+      );
+
       return;
     }
+
+    let cursor;
+
+    if (cursorValue !== null) {
+      try {
+        cursor = decodeCursor(cursorValue);
+      } catch {
+        res.writeHead(400, {
+          "Content-Type": "application/json",
+        });
+
+        res.end(
+          JSON.stringify({
+            error: "invalid cursor",
+          }),
+        );
+
+        return;
+      }
+    }
+
+    const logs = await listLogs(limit, cursor);
+
+    let nextCursor: string | null = null;
+
+    if (logs.length === limit) {
+      const lastLog = logs[logs.length - 1];
+      if (!lastLog) {
+         throw new Error("Expected last log to exist");
+      }
+      nextCursor = encodeCursor({
+        timestamp: lastLog.timestamp.toISOString(),
+        id: lastLog.id,
+      });
+    }
+
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+    });
+
+    res.end(
+      JSON.stringify({
+        logs,
+        next_cursor: nextCursor,
+      }),
+    );
+
+    return;
+  }
+}
+
 
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "not found" }));
