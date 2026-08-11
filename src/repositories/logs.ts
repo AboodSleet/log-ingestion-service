@@ -1,5 +1,6 @@
 import { sql } from "../db.js";
 import type { LogEntry, LogCursor } from "../types/log.js";
+import type { LogFilters } from "../filters.js";
 
 export async function insertLogs(logs: LogEntry[]) {
   if (logs.length === 0) {
@@ -14,32 +15,64 @@ export async function insertLogs(logs: LogEntry[]) {
         level: log.level,
         service: log.service,
         message: log.message,
-        attributes: JSON.stringify(log.attributes ?? {}),
+        attributes: log.attributes ?? {},
       })),
     )}
   `;
 }
 
-
 export async function listLogs(
   limit: number,
-  cursor?: LogCursor,
+  cursor: LogCursor | undefined,
+  filters: LogFilters,
 ) {
-  if (cursor) {
-    return sql`
-      SELECT
-        id,
-        timestamp,
-        level,
-        service,
-        message,
-        attributes
-      FROM logs
-      WHERE (timestamp, id) < (${cursor.timestamp}, ${cursor.id})
-      ORDER BY timestamp DESC, id DESC
-      LIMIT ${limit}
-    `;
+  const conditions = [sql`TRUE`];
+
+  if (filters.service !== undefined) {
+    conditions.push(
+      sql`service = ${filters.service}`,
+    );
   }
+
+  if (filters.level !== undefined) {
+    conditions.push(
+      sql`level = ${filters.level}`,
+    );
+  }
+
+  if (filters.since !== undefined) {
+    conditions.push(
+      sql`timestamp >= ${filters.since}`,
+    );
+  }
+
+  if (filters.until !== undefined) {
+    conditions.push(
+      sql`timestamp <= ${filters.until}`,
+    );
+  }
+
+  if (filters.query !== undefined) {
+    conditions.push(
+      sql`message ILIKE ${`%${filters.query}%`}`,
+    );
+  }
+
+  for (const [key, value] of Object.entries(filters.attributes)) {
+    conditions.push(
+      sql`attributes ->> ${key} = ${value}`,
+    );
+  }
+
+  if (cursor !== undefined) {
+    conditions.push(
+      sql`(timestamp, id) < (${cursor.timestamp}, ${cursor.id})`,
+    );
+  }
+
+  const where = conditions.reduce(
+    (query, condition) => sql`${query} AND ${condition}`,
+  );
 
   return sql`
     SELECT
@@ -50,6 +83,7 @@ export async function listLogs(
       message,
       attributes
     FROM logs
+    WHERE ${where}
     ORDER BY timestamp DESC, id DESC
     LIMIT ${limit}
   `;
