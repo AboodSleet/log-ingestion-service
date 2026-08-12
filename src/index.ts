@@ -5,11 +5,53 @@ import { insertLogs, listLogs } from "./repositories/logs.js";
 import { encodeCursor, decodeCursor } from "./pagination/cursor.js";
 import { parseFilters } from "./filters.js";
 import { validateFilters } from "./validation/filters.js";
+import { deleteExpiredLogs } from "./retention/cleanup.js";
+
 
 const PORT = 8080;
 
+const RETENTION_DAYS = Number(
+  process.env.LOG_RETENTION_DAYS ?? 30,
+);
+
+const RETENTION_INTERVAL_MS =
+  60 * 60 * 1000;
+
+
 async function main() {
   await migrate();
+
+  try {
+    const deleted = await deleteExpiredLogs(
+      RETENTION_DAYS,
+    );
+
+    console.log(
+      `Retention cleanup: deleted ${deleted} expired logs`,
+    );
+  } catch (error) {
+    console.error(
+      "Retention cleanup failed:",
+      error,
+    );
+  }
+
+  setInterval(async () => {
+    try {
+      const deleted = await deleteExpiredLogs(
+        RETENTION_DAYS,
+      );
+
+      console.log(
+        `Retention cleanup: deleted ${deleted} expired logs`,
+      );
+    } catch (error) {
+      console.error(
+        "Retention cleanup failed:",
+        error,
+      );
+    }
+  }, RETENTION_INTERVAL_MS);
 
   const server = createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/health") {

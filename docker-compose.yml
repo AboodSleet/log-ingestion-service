@@ -9,6 +9,23 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d logs"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/logs
+      LOG_RETENTION_DAYS: 30
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: npm run start:docker
 
 volumes:
   postgres_data:
