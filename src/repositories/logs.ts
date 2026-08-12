@@ -7,18 +7,24 @@ export async function insertLogs(logs: LogEntry[]) {
     return;
   }
 
-  await sql`
-    INSERT INTO logs ${sql(
-      logs.map((log) => ({
-        id: crypto.randomUUID(),
-        timestamp: log.timestamp,
-        level: log.level,
-        service: log.service,
-        message: log.message,
-        attributes: log.attributes ?? {},
-      })),
-    )}
-  `;
+  const BATCH_SIZE = 500;
+
+  for (let i = 0; i < logs.length; i += BATCH_SIZE) {
+    const batch = logs.slice(i, i + BATCH_SIZE);
+
+    await sql`
+      INSERT INTO logs ${sql(
+        batch.map((log) => ({
+          id: crypto.randomUUID(),
+          timestamp: log.timestamp,
+          level: log.level,
+          service: log.service,
+          message: log.message,
+          attributes: log.attributes ?? {},
+        })),
+      )}
+    `;
+  }
 }
 
 export async function listLogs(
