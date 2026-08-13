@@ -29,17 +29,16 @@ export function validateLog(
     };
   }
 
-  const timestamp = new Date(log.timestamp);
+   const timestampMs = Date.parse(log.timestamp);
 
-  if (Number.isNaN(timestamp.getTime())) {
+   if (Number.isNaN(timestampMs)) {
     return {
       valid: false,
       reason: "invalid timestamp",
     };
   }
 
-  if (timestamp.getTime() > Date.now() + MAX_FUTURE_MS) {
-    return {
+   if (timestampMs > Date.now() + MAX_FUTURE_MS) {    return {
       valid: false,
       reason: "timestamp is more than five minutes in the future",
     };
@@ -110,7 +109,7 @@ export function validateLog(
   return {
     valid: true,
     log: {
-      timestamp: timestamp.toISOString(),
+      timestamp: log.timestamp,
       level: log.level as LogEntry["level"],
       service: log.service,
       message: log.message,

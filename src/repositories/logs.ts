@@ -15,7 +15,6 @@ export async function insertLogs(logs: LogEntry[]) {
     await sql`
       INSERT INTO logs ${sql(
         batch.map((log) => ({
-          id: crypto.randomUUID(),
           timestamp: log.timestamp,
           level: log.level,
           service: log.service,

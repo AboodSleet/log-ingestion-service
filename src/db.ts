@@ -6,4 +6,8 @@ if (!databaseUrl) {
   throw new Error("DATABASE_URL is not set");
 }
 
-export const sql = postgres(databaseUrl);
+export const sql = postgres(databaseUrl, {
+  max: 10,
+  idle_timeout: 20,
+  connect_timeout: 10,
+});
