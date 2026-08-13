@@ -7,7 +7,7 @@ export async function insertLogs(logs: LogEntry[]) {
     return;
   }
 
-  const BATCH_SIZE = 500;
+  const BATCH_SIZE = 5000;
 
   for (let i = 0; i < logs.length; i += BATCH_SIZE) {
     const batch = logs.slice(i, i + BATCH_SIZE);
