@@ -11,23 +11,27 @@ export async function aggregateLogs(
 
   switch (filters.bucket) {
     case "1m":
-      bucketExpression = sql`date_trunc('minute', timestamp)`;
+      bucketExpression = sql`
+        date_bin('1 minute', timestamp, TIMESTAMPTZ '2000-01-01 00:00:00+00')
+      `;
       break;
 
     case "5m":
       bucketExpression = sql`
-        date_trunc('hour', timestamp)
-        + floor(extract(minute from timestamp) / 5)
-          * interval '5 minutes'
+        date_bin('5 minutes', timestamp, TIMESTAMPTZ '2000-01-01 00:00:00+00')
       `;
       break;
 
     case "1h":
-      bucketExpression = sql`date_trunc('hour', timestamp)`;
+      bucketExpression = sql`
+        date_bin('1 hour', timestamp, TIMESTAMPTZ '2000-01-01 00:00:00+00')
+      `;
       break;
 
     case "1d":
-      bucketExpression = sql`date_trunc('day', timestamp)`;
+      bucketExpression = sql`
+        date_bin('1 day', timestamp, TIMESTAMPTZ '2000-01-01 00:00:00+00')
+      `;
       break;
 
     default:
