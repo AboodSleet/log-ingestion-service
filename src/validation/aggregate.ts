@@ -14,7 +14,7 @@ export type AggregateFilters = {
   since?: Date;
   until?: Date;
   bucket: string;
-  groupBy: string;
+  groupBy?: string;
 };
 
 export function validateAggregateFilters(
@@ -24,9 +24,12 @@ export function validateAggregateFilters(
     return `invalid bucket: '${filters.bucket}'`;
   }
 
-  if (!VALID_GROUPS.has(filters.groupBy)) {
-    return `invalid group_by: '${filters.groupBy}'`;
-  }
+   if (
+     filters.groupBy !== undefined &&
+     !VALID_GROUPS.has(filters.groupBy)
+    ) {
+     return `invalid group_by: '${filters.groupBy}'`;
+   }
 
   if (
     filters.since !== undefined &&

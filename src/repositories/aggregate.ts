@@ -17,7 +17,8 @@ export async function aggregateLogs(
     case "5m":
       bucketExpression = sql`
         date_trunc('hour', timestamp)
-        + floor(extract(minute from timestamp) / 5) * interval '5 minutes'
+        + floor(extract(minute from timestamp) / 5)
+          * interval '5 minutes'
       `;
       break;
 
@@ -31,6 +32,20 @@ export async function aggregateLogs(
 
     default:
       throw new Error("invalid bucket");
+  }
+
+  if (filters.groupBy === undefined) {
+    return sql`
+      SELECT
+        ${bucketExpression} AS start,
+        NULL AS "group",
+        COUNT(*)::int AS count
+      FROM logs
+      WHERE timestamp >= ${since}
+        AND timestamp <= ${until}
+      GROUP BY ${bucketExpression}
+      ORDER BY start ASC
+    `;
   }
 
   let groupExpression;
@@ -50,8 +65,8 @@ export async function aggregateLogs(
 
   return sql`
     SELECT
-      ${bucketExpression} AS bucket,
-      ${groupExpression} AS group_value,
+      ${bucketExpression} AS start,
+      ${groupExpression} AS "group",
       COUNT(*)::int AS count
     FROM logs
     WHERE timestamp >= ${since}
@@ -60,7 +75,7 @@ export async function aggregateLogs(
       ${bucketExpression},
       ${groupExpression}
     ORDER BY
-      bucket ASC,
-      group_value ASC
+      start ASC,
+      "group" ASC
   `;
 }

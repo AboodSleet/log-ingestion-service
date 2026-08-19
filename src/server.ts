@@ -35,21 +35,22 @@ export function createApp() {
       );
 
       if (url.pathname === "/logs/aggregate") {
-        const bucket =
-          url.searchParams.get("bucket") ?? "1h";
 
-        const groupBy =
-          url.searchParams.get("group_by") ?? "service";
-
+        const bucket = url.searchParams.get("bucket") ?? "1h";
+        const groupBy = url.searchParams.get("group_by") ?? undefined;
+        
         const sinceParam =
           url.searchParams.get("since");
 
         const untilParam =
           url.searchParams.get("until");
 
-        const filters: AggregateFilters = {
-         bucket,
-         groupBy,
+        const filters: AggregateFilters = {bucket, ...(groupBy !== undefined && { groupBy }), ...(sinceParam !== null && {
+             since: new Date(sinceParam),
+               }),
+             ...(untilParam !== null && {
+               until: new Date(untilParam),
+              }),
         };
 
         if (sinceParam !== null) {
