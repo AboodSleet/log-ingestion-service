@@ -4,6 +4,13 @@ import { insertLogs, listLogs } from "./repositories/logs.js";
 import { encodeCursor, decodeCursor } from "./pagination/cursor.js";
 import { parseFilters } from "./filters.js";
 import { validateFilters } from "./validation/filters.js";
+import {
+  aggregateLogs,
+} from "./repositories/aggregate.js";
+import {
+  validateAggregateFilters,
+  type AggregateFilters,
+} from "./validation/aggregate.js";
 
 export function createApp() {
   return createServer(async (req, res) => {
@@ -27,10 +34,90 @@ export function createApp() {
         `http://${req.headers.host}`,
       );
 
-      if (url.pathname === "/logs") {
-        const filters = parseFilters(url.searchParams);
+      if (url.pathname === "/logs/aggregate") {
+        const bucket =
+          url.searchParams.get("bucket") ?? "1h";
 
-        const filterError = validateFilters(filters);
+        const groupBy =
+          url.searchParams.get("group_by") ?? "service";
+
+        const sinceParam =
+          url.searchParams.get("since");
+
+        const untilParam =
+          url.searchParams.get("until");
+
+        const filters: AggregateFilters = {
+         bucket,
+         groupBy,
+        };
+
+        if (sinceParam !== null) {
+          filters.since = new Date(sinceParam);
+        }
+
+        if (untilParam !== null) {
+          filters.until = new Date(untilParam);
+        };
+
+        const filterError =
+          validateAggregateFilters(filters);
+
+        if (filterError !== null) {
+          res.writeHead(400, {
+            "Content-Type": "application/json",
+          });
+
+          res.end(
+            JSON.stringify({
+              error: filterError,
+            }),
+          );
+
+          return;
+        }
+
+        try {
+          const rows = await aggregateLogs(filters);
+
+          res.writeHead(200, {
+            "Content-Type": "application/json",
+          });
+
+          res.end(
+            JSON.stringify({
+              buckets: rows,
+            }),
+          );
+
+          return;
+        } catch (error) {
+          console.error(
+            "Failed to aggregate logs:",
+            error,
+          );
+
+          res.writeHead(500, {
+            "Content-Type": "application/json",
+          });
+
+          res.end(
+            JSON.stringify({
+              error: "internal server error",
+            }),
+          );
+
+          return;
+        }
+      }
+
+      if (url.pathname === "/logs") {
+        const filters = parseFilters(
+          url.searchParams,
+        );
+
+        const filterError =
+          validateFilters(filters);
 
         if (filterError !== null) {
           res.writeHead(400, {
@@ -77,7 +164,8 @@ export function createApp() {
         let nextCursor: string | null = null;
 
         if (logs.length === limit) {
-          const lastLog = logs[logs.length - 1];
+          const lastLog =
+            logs[logs.length - 1];
 
           if (!lastLog) {
             throw new Error(
@@ -86,7 +174,8 @@ export function createApp() {
           }
 
           nextCursor = encodeCursor({
-            timestamp: lastLog.timestamp.toISOString(),
+            timestamp:
+              lastLog.timestamp.toISOString(),
             id: lastLog.id,
           });
         }
@@ -110,7 +199,11 @@ export function createApp() {
       "Content-Type": "application/json",
     });
 
-    res.end(JSON.stringify({ error: "not found" }));
+    res.end(
+      JSON.stringify({
+        error: "not found",
+      }),
+    );
   });
 }
 
@@ -125,7 +218,8 @@ async function handleIngestLogs(
       chunks.push(Buffer.from(chunk));
     }
 
-    const body = Buffer.concat(chunks).toString("utf8");
+    const body =
+      Buffer.concat(chunks).toString("utf8");
 
     let parsed: unknown;
 
@@ -159,16 +253,19 @@ async function handleIngestLogs(
 
       res.end(
         JSON.stringify({
-          error: "request body must contain a logs array",
+          error:
+            "request body must contain a logs array",
         }),
       );
 
       return;
     }
 
-    const entries = (parsed as { logs: unknown[] }).logs;
+    const entries =
+      (parsed as { logs: unknown[] }).logs;
 
     const accepted = [];
+
     const rejected: {
       index: number;
       reason: string;
@@ -179,7 +276,8 @@ async function handleIngestLogs(
       index < entries.length;
       index++
     ) {
-      const result = validateLog(entries[index]);
+      const result =
+        validateLog(entries[index]);
 
       if (result.valid) {
         accepted.push(result.log);
