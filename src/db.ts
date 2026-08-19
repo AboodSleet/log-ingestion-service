@@ -7,5 +7,5 @@ if (!databaseUrl) {
 }
 
 export const sql = postgres(databaseUrl, {
-  max: 20,
+  max: 10,
 });
