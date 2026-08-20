@@ -11,26 +11,36 @@ export async function aggregateLogs(
 
   switch (filters.bucket) {
     case "1m":
-      bucketExpression = sql`
-        date_bin('1 minute', timestamp, TIMESTAMPTZ '2000-01-01 00:00:00+00')
-      `;
+      bucketExpression = sql`bucket_start`;
       break;
 
     case "5m":
       bucketExpression = sql`
-        date_bin('5 minutes', timestamp, TIMESTAMPTZ '2000-01-01 00:00:00+00')
+        date_bin(
+          '5 minutes',
+          bucket_start,
+          TIMESTAMPTZ '2000-01-01 00:00:00+00'
+        )
       `;
       break;
 
     case "1h":
       bucketExpression = sql`
-        date_bin('1 hour', timestamp, TIMESTAMPTZ '2000-01-01 00:00:00+00')
+        date_bin(
+          '1 hour',
+          bucket_start,
+          TIMESTAMPTZ '2000-01-01 00:00:00+00'
+        )
       `;
       break;
 
     case "1d":
       bucketExpression = sql`
-        date_bin('1 day', timestamp, TIMESTAMPTZ '2000-01-01 00:00:00+00')
+        date_bin(
+          '1 day',
+          bucket_start,
+          TIMESTAMPTZ '2000-01-01 00:00:00+00'
+        )
       `;
       break;
 
@@ -43,10 +53,10 @@ export async function aggregateLogs(
       SELECT
         ${bucketExpression} AS start,
         NULL AS "group",
-        COUNT(*)::int AS count
-      FROM logs
-      WHERE timestamp >= ${since}
-        AND timestamp <= ${until}
+        SUM(count)::int AS count
+      FROM log_aggregates
+      WHERE bucket_start >= ${since}
+        AND bucket_start <= ${until}
       GROUP BY ${bucketExpression}
       ORDER BY start ASC
     `;
@@ -71,10 +81,10 @@ export async function aggregateLogs(
     SELECT
       ${bucketExpression} AS start,
       ${groupExpression} AS "group",
-      COUNT(*)::int AS count
-    FROM logs
-    WHERE timestamp >= ${since}
-      AND timestamp <= ${until}
+      SUM(count)::int AS count
+    FROM log_aggregates
+    WHERE bucket_start >= ${since}
+      AND bucket_start <= ${until}
     GROUP BY
       ${bucketExpression},
       ${groupExpression}
