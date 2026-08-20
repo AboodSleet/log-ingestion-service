@@ -4,51 +4,32 @@ A high-throughput log ingestion and query service built with **Node.js, TypeScri
 
 The service accepts structured logs in batches, validates each entry, stores valid logs in PostgreSQL, and provides flexible querying, cursor-based pagination, time-bucketed aggregation, and automatic log retention.
 
-The project is designed to handle high-volume ingestion while remaining reliable under sustained load.
-
 ---
 
 ## Features
 
 * Batch log ingestion
 * Per-entry validation with partial batch acceptance
-* Supported log levels:
-
-  * `debug`
-  * `info`
-  * `warn`
-  * `error`
-* Query logs using multiple combinable filters
-* Filter by:
+* Log levels: `debug`, `info`, `warn`, `error`
+* Combinable query filters:
 
   * service
-  * log level
+  * level
   * timestamp range
   * message content
   * custom attributes
 * Case-insensitive message search
-* Cursor-based pagination
-* Stable deterministic ordering
-* Time-bucketed log aggregation
-* Aggregation by:
-
-  * service
-  * level
-* Supported aggregation buckets:
-
-  * `1m`
-  * `5m`
-  * `1h`
-  * `1d`
+* Cursor-based pagination with deterministic ordering
+* Time-bucketed aggregation
+* Aggregation by service or level
+* Bucket sizes: `1m`, `5m`, `1h`, `1d`
 * Automatic log retention
-* PostgreSQL persistence
-* PostgreSQL health checks
-* Docker and Docker Compose support
+* PostgreSQL persistence and health checks
+* Docker Compose deployment
 * Database migrations
-* TypeScript build validation
 * Automated tests with Vitest
-* GitHub Actions CI pipeline
-* Performance and benchmark testing
+* GitHub Actions CI
+* Performance benchmarking with Grafana k6
 
 ---
 
@@ -57,14 +38,13 @@ The project is designed to handle high-volume ingestion while remaining reliable
 * Node.js 22
 * TypeScript
 * PostgreSQL 17
-* Docker
-* Docker Compose
+* Docker / Docker Compose
 * Vitest
 * `postgres` Node.js PostgreSQL client
 * GitHub Actions
-* Grafana k6 for benchmark testing
+* Grafana k6
 
-The project does **not** use an ORM. Database access is implemented directly using the `postgres` Node.js client.
+The project does **not** use an ORM. Database access is implemented directly using the `postgres` package.
 
 ---
 
@@ -78,21 +58,19 @@ src/
 ├── repositories/           # PostgreSQL queries
 ├── retention/              # Automatic log cleanup
 ├── types/                  # TypeScript types
-├── validation/             # Log, query, and aggregation validation
+├── validation/             # Request validation
 ├── db.ts                   # PostgreSQL connection
 ├── filters.ts              # Query parameter parsing
-├── migrate.ts              # Database migration runner
-├── server.ts               # HTTP server and request handling
+├── migrate.ts              # Migration runner
+├── server.ts               # HTTP server
 └── index.ts                # Application entry point
 
 .github/
 └── workflows/
-    └── ci.yml              # GitHub Actions CI
+    └── ci.yml              # CI pipeline
 
 Dockerfile
 docker-compose.yml
-vitest.config.ts
-tsconfig.json
 package.json
 README.md
 ```
@@ -101,19 +79,19 @@ README.md
 
 # Running the Project
 
-The recommended way to run the complete service is with Docker Compose.
+The recommended way to run the complete service is:
 
 ```bash
 docker compose up -d --build
 ```
 
-Check the running containers:
+Check the containers:
 
 ```bash
 docker compose ps
 ```
 
-The API is available at:
+The API runs on:
 
 ```text
 http://localhost:8080
@@ -121,9 +99,7 @@ http://localhost:8080
 
 ---
 
-## Health Check
-
-The service provides:
+# Health Check
 
 ```text
 GET /health
@@ -135,7 +111,7 @@ Example:
 curl http://localhost:8080/health
 ```
 
-Successful response:
+Response:
 
 ```json
 {
@@ -143,11 +119,9 @@ Successful response:
 }
 ```
 
-The endpoint is also used by Docker Compose and the benchmark environment to verify that the application is ready.
-
 ---
 
-# Ingesting Logs
+# Log Ingestion
 
 Logs are submitted in batches using:
 
@@ -169,7 +143,6 @@ curl -X POST http://localhost:8080/logs \
         "message": "database connection failed",
         "attributes": {
           "retries": 3,
-          "user_id": "123",
           "cached": false
         }
       }
@@ -177,7 +150,7 @@ curl -X POST http://localhost:8080/logs \
   }'
 ```
 
-A successful request returns the number of accepted logs and any rejected entries:
+Response:
 
 ```json
 {
@@ -186,33 +159,21 @@ A successful request returns the number of accepted logs and any rejected entrie
 }
 ```
 
-### Partial Batch Acceptance
+Each entry is validated independently, so an invalid entry does not cause valid entries in the same batch to be rejected.
 
-Each log entry is validated independently.
+Validation includes:
 
-An invalid entry does **not** cause valid entries in the same batch to be rejected.
-
-For example:
-
-```json
-{
-  "accepted": 2,
-  "rejected": [
-    {
-      "index": 1,
-      "reason": "invalid log level"
-    }
-  ]
-}
-```
-
-This allows high-volume clients to submit batches without having one malformed entry invalidate the entire request.
+* Valid ISO 8601 timestamp
+* Timestamp not more than 5 minutes in the future
+* Valid log level
+* Non-empty service
+* Non-empty message
+* Flat attributes object
+* Attribute values limited to strings, numbers, and booleans
 
 ---
 
 # Querying Logs
-
-Logs can be queried using:
 
 ```text
 GET /logs
@@ -221,97 +182,59 @@ GET /logs
 Example:
 
 ```bash
-curl "http://localhost:8080/logs?level=error&limit=5"
+curl "http://localhost:8080/logs?service=users&level=error&limit=5"
 ```
 
-Example response:
-
-```json
-{
-  "logs": [
-    {
-      "id": "2fcfef68-788b-4111-9a01-b3422288094f",
-      "timestamp": "2026-08-11T12:37:51.700Z",
-      "level": "error",
-      "service": "users",
-      "message": "load test log 3",
-      "attributes": {
-        "retries": 3,
-        "user_id": "3"
-      }
-    }
-  ],
-  "next_cursor": "..."
-}
-```
-
----
-
-# Available Query Filters
-
-The query filters are designed to be freely combinable.
-
-## Service
+Supported filters:
 
 ```text
-/logs?service=users
+service
+level
+since
+until
+q
+attr.<key>
+limit
+cursor
 ```
 
-## Log Level
+Examples:
 
-```text
-/logs?level=error
+```bash
+curl "http://localhost:8080/logs?level=error"
+
+curl "http://localhost:8080/logs?service=users&level=error"
+
+curl "http://localhost:8080/logs?q=database"
+
+curl "http://localhost:8080/logs?attr.user_id=123"
+
+curl "http://localhost:8080/logs?since=2026-08-01T00:00:00Z&until=2026-08-12T00:00:00Z"
 ```
 
-## Time Range
-
-Filter logs after a specific timestamp:
-
-```text
-/logs?since=2026-08-01T00:00:00Z
-```
-
-Filter logs before a specific timestamp:
-
-```text
-/logs?until=2026-08-12T00:00:00Z
-```
-
-Both can be combined:
-
-```text
-/logs?since=2026-08-01T00:00:00Z&until=2026-08-12T00:00:00Z
-```
-
-## Message Search
-
-Search the message using a case-insensitive substring match:
-
-```text
-/logs?q=database
-```
-
-## Attribute Filtering
-
-Custom attributes can be queried using the `attr.` prefix:
-
-```text
-/logs?attr.user_id=123
-```
-
-Multiple attribute filters can be combined with other filters:
-
-```text
-/logs?service=users&level=error&attr.user_id=123&limit=50
-```
+Filters can be freely combined.
 
 ---
 
 # Pagination
 
-The API uses **cursor-based pagination** instead of offset pagination.
+The API uses **cursor-based pagination**.
 
-When additional results are available, the response contains:
+Results are ordered by:
+
+```text
+timestamp DESC, id DESC
+```
+
+The cursor contains the required ordering information, allowing stable pagination without large SQL offsets.
+
+Example:
+
+```bash
+curl "http://localhost:8080/logs?limit=100"
+```
+
+If more results exist:
 
 ```json
 {
@@ -319,38 +242,21 @@ When additional results are available, the response contains:
 }
 ```
 
-The cursor can be passed to retrieve the next page:
+The cursor can then be used for the next page.
 
-```bash
-curl "http://localhost:8080/logs?limit=100&cursor=YOUR_CURSOR"
-```
-
-The cursor is based on:
-
-* log timestamp
-* log ID
-
-This provides stable deterministic ordering even when multiple logs have the same timestamp or new logs are inserted.
-
-The maximum page size is:
-
-```text
-1000 logs
-```
-
-Invalid cursors return a client error.
+The maximum page size is `1000`.
 
 ---
 
 # Log Aggregation
 
-The service provides time-bucketed aggregation through:
+Aggregation is available through:
 
 ```text
 GET /logs/aggregate
 ```
 
-Aggregation supports four bucket sizes:
+Supported buckets:
 
 ```text
 1m
@@ -359,271 +265,117 @@ Aggregation supports four bucket sizes:
 1d
 ```
 
-## Basic Aggregation
-
 Example:
 
 ```bash
 curl "http://localhost:8080/logs/aggregate?bucket=1m"
 ```
 
-Example response:
-
-```json
-{
-  "buckets": [
-    {
-      "start": "2026-08-16T20:00:00.000Z",
-      "group": null,
-      "count": 4
-    }
-  ]
-}
-```
-
-When no grouping is requested, the result contains:
-
-* `start` — beginning of the time bucket
-* `group` — `null`
-* `count` — number of logs in the bucket
-
----
-
-## Aggregation by Service
-
-Use:
-
-```text
-group_by=service
-```
-
-Example:
+Aggregation can be grouped by service or level:
 
 ```bash
 curl "http://localhost:8080/logs/aggregate?bucket=5m&group_by=service"
-```
 
-Example response:
-
-```json
-{
-  "buckets": [
-    {
-      "start": "2026-08-16T20:00:00.000Z",
-      "group": "checkout",
-      "count": 2
-    },
-    {
-      "start": "2026-08-16T20:00:00.000Z",
-      "group": "users",
-      "count": 3
-    }
-  ]
-}
-```
-
----
-
-## Aggregation by Log Level
-
-Use:
-
-```text
-group_by=level
-```
-
-Example:
-
-```bash
 curl "http://localhost:8080/logs/aggregate?bucket=1h&group_by=level"
 ```
 
----
-
-## Aggregation Time Range
-
-Aggregation can also be restricted using `since` and `until`:
+Time ranges can also be specified:
 
 ```bash
 curl "http://localhost:8080/logs/aggregate?since=2026-08-01T00:00:00Z&until=2026-08-12T00:00:00Z&bucket=1h"
 ```
 
-The aggregation implementation uses PostgreSQL `date_bin()` for fixed-size time buckets, including the `5m` bucket.
+PostgreSQL `date_bin()` is used to create consistent fixed-size time buckets.
 
-This provides consistent bucket boundaries and efficient grouping directly inside PostgreSQL.
-
----
-
-# Log Validation
-
-Incoming logs are validated before they are inserted into the database.
-
-Validation includes:
-
-* Required timestamp
-* Valid ISO 8601 timestamp
-* Timestamp cannot be more than **5 minutes in the future**
-* Valid log level
-* Non-empty service name
-* Non-empty message
-* Attributes must be a flat object
-* Attribute values must be:
-
-  * strings
-  * numbers
-  * booleans
-
-Malformed requests and invalid query parameters return an appropriate `400` response.
-
-The five-minute rule prevents clients from submitting logs with timestamps significantly ahead of the server's current time.
-
-It does not reject logs simply because they are old; old logs are handled separately by the retention policy.
+The project also maintains **precomputed minute-level aggregates** in PostgreSQL to reduce the cost of repeated aggregation queries.
 
 ---
 
 # Log Retention
 
-The service automatically removes logs older than the configured retention period.
+Logs older than the configured retention period are automatically removed.
 
-The default retention period is:
+Default:
 
 ```text
 30 days
 ```
 
-Docker Compose configures:
+Cleanup runs:
 
-```text
+1. Once when the application starts
+2. Every hour afterwards
+
+Configured using:
+
+```env
 LOG_RETENTION_DAYS=30
 ```
-
-Retention cleanup runs:
-
-1. Once when the service starts
-2. Once every hour afterwards
-
-The cleanup interval is implemented using an hourly background task.
-
-The retention mechanism keeps the database from growing indefinitely while allowing recent logs to remain queryable.
 
 ---
 
 # Database
 
-The service uses:
+The service uses PostgreSQL 17 with direct SQL access through the `postgres` package.
+
+Main table:
 
 ```text
-PostgreSQL 17
+logs
+├── id
+├── timestamp
+├── level
+├── service
+├── message
+└── attributes
 ```
-
-The database schema is created through migrations.
-
-Migration file:
-
-```text
-src/migrations/001_create_logs.sql
-```
-
-The main `logs` table contains:
-
-```text
-id
-timestamp
-level
-service
-message
-attributes
-```
-
-`id` is a UUID generated by PostgreSQL.
 
 `attributes` is stored as PostgreSQL `jsonb`.
 
----
+Database migrations are stored in:
 
-## Database Indexes
+```text
+src/migrations/
+```
 
-The project uses a composite index on:
+Current migrations include:
+
+```text
+001_create_logs.sql
+002_create_log_aggregates.sql
+```
+
+The primary log query is supported by the composite index:
 
 ```text
 (timestamp DESC, id DESC)
 ```
 
-This index supports the main cursor-based log query and deterministic ordering.
-
-The timestamp component also allows PostgreSQL to efficiently restrict queries to a timestamp range.
-
-The project intentionally avoids an ORM and uses PostgreSQL queries directly through the `postgres` package.
-
----
-
-# Persistence
-
-Docker Compose uses a named PostgreSQL volume so database data survives container restarts.
-
-The volume is:
-
-```text
-log-ingestion-service_postgres_data
-```
-
-Stop the containers without deleting stored data:
-
-```bash
-docker compose down
-```
-
-Remove the containers and the database volume:
-
-```bash
-docker compose down -v
-```
-
-> Warning: `docker compose down -v` permanently deletes the PostgreSQL data stored in the volume.
+Docker Compose uses a named PostgreSQL volume so data survives container restarts.
 
 ---
 
 # Testing
 
-Run the automated tests with:
+Run automated tests:
 
 ```bash
 npm test
 ```
 
-The test suite includes validation and filter tests.
-
-Build the TypeScript project with:
+Build the TypeScript project:
 
 ```bash
 npm run build
 ```
 
-The TypeScript build is also verified by the CI pipeline.
-
----
-
-# CI
-
-GitHub Actions automatically verifies the project.
-
-The CI pipeline checks that the project can:
-
-1. Install dependencies
-2. Build successfully
-3. Run the test suite
-
-Workflow:
-
-```text
-.github/workflows/ci.yml
-```
+The same checks are also executed by GitHub Actions.
 
 ---
 
 # Benchmarking
 
-The project was tested using the provided logs benchmark CLI.
+The project was tested using the provided `@foothill/logs-benchmark` CLI.
 
 The benchmark evaluates:
 
@@ -635,7 +387,7 @@ The benchmark evaluates:
 * Read-after-write consistency
 * Reliability under different load scenarios
 
-The benchmark applies the required resource limits:
+The required resource limits are:
 
 ```text
 Application:
@@ -647,31 +399,9 @@ PostgreSQL:
 1024 MB RAM
 ```
 
-The benchmark also includes:
+## Local Benchmark
 
-* load
-* stress
-* spike
-* breakpoint
-
-scenarios.
-
-The load generator runs separately using Grafana k6.
-
----
-
-## Benchmark Results
-
-A short local benchmark run using:
-
-```text
-25,000 fixture rows
-0.25x scenario duration
-seed 6122026
-generator: 4 CPUs
-```
-
-produced:
+A reduced local benchmark using 25,000 fixture rows and `0.25x` scenario duration achieved:
 
 ```text
 Correctness: 15.0 / 15
@@ -682,40 +412,89 @@ Reliability: 20.0 / 20
 Total:       92.9 / 100
 ```
 
-The run achieved approximately:
+Approximate performance:
 
 ```text
 14,997 logs/sec
-```
-
-with:
-
-```text
 0.0% errors
 26 ms p95 latency
 118 ms aggregate p95 latency
 4/4 consistency scenarios passed
-4/4 reliability scenarios passed
 ```
 
-The benchmark was run at `0.25x` duration, so these results are useful as a local performance validation rather than a replacement for the platform's full benchmark run.
+This was a reduced local benchmark intended for development and performance validation.
 
-A full benchmark run is affected by the available machine CPU and the benchmark generator's ability to schedule all iterations.
+---
+
+## Full Benchmarks
+
+A full benchmark with 1,000,000 fixture rows produced:
+
+### Full Run 1
+
+```text
+Correctness: 15.0 / 15
+Performance: 44.9 / 50
+Queries:      7.6 / 15
+Reliability: 20.0 / 20
+
+Total:        87.6 / 100
+```
+
+Performance:
+
+```text
+14,953 logs/sec
+0.0% errors
+83 ms p95 latency
+76 ms aggregate p95 latency
+```
+
+### Full Run 2
+
+After the same implementation was benchmarked again:
+
+```text
+Correctness: 15.0 / 15
+Performance: 44.8 / 50
+Queries:      8.3 / 15
+Reliability: 20.0 / 20
+
+Total:        88.0 / 100
+```
+
+Performance:
+
+```text
+14,833 logs/sec
+0.0% errors
+17 ms p95 latency
+42 ms aggregate p95 latency
+```
+
+The benchmark environment used Docker Desktop with:
+
+```text
+8 CPUs
+8 GiB RAM
+```
+
+The benchmark tool reported CPU contention because the application, PostgreSQL, and load generator together require approximately 7.5 CPUs. Therefore, benchmark results are machine-dependent and should primarily be compared under the same environment.
 
 ---
 
 # Environment Variables
 
-For local development, create a `.env` file:
+For local development:
 
 ```env
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/logs
 LOG_RETENTION_DAYS=30
 ```
 
-The `.env` file is ignored by Git and should not be committed.
+The `.env` file should not be committed to Git.
 
-When running through Docker Compose, the application connects to PostgreSQL using the Docker service name:
+When running through Docker Compose, the application connects to PostgreSQL using:
 
 ```text
 postgres://postgres:postgres@db:5432/logs
@@ -731,13 +510,13 @@ Install dependencies:
 npm ci
 ```
 
-Run the application:
+Start the application:
 
 ```bash
 npm run start
 ```
 
-Run in development mode with automatic restart:
+Development mode:
 
 ```bash
 npm run dev
@@ -749,44 +528,10 @@ Run tests:
 npm test
 ```
 
-Build the TypeScript project:
+Build:
 
 ```bash
 npm run build
-```
-
----
-
-# Docker Development
-
-Build and start the complete stack:
-
-```bash
-docker compose up -d --build
-```
-
-View running containers:
-
-```bash
-docker compose ps
-```
-
-View application logs:
-
-```bash
-docker compose logs app
-```
-
-View PostgreSQL logs:
-
-```bash
-docker compose logs db
-```
-
-Stop the stack:
-
-```bash
-docker compose down
 ```
 
 ---
@@ -800,7 +545,7 @@ docker compose down
 | `GET`  | `/logs`           | Query logs                |
 | `GET`  | `/logs/aggregate` | Time-bucketed aggregation |
 
-### `/logs` query parameters
+### `/logs`
 
 | Parameter    | Description                     |
 | ------------ | ------------------------------- |
@@ -811,9 +556,9 @@ docker compose down
 | `q`          | Case-insensitive message search |
 | `attr.<key>` | Filter by custom attribute      |
 | `limit`      | Number of results, maximum 1000 |
-| `cursor`     | Cursor for the next page        |
+| `cursor`     | Pagination cursor               |
 
-### `/logs/aggregate` query parameters
+### `/logs/aggregate`
 
 | Parameter  | Description               |
 | ---------- | ------------------------- |
@@ -826,25 +571,23 @@ docker compose down
 
 # Design Notes
 
-Several design decisions were made to satisfy the high-throughput requirements while keeping the implementation simple.
+### Direct PostgreSQL Access
 
-### Direct PostgreSQL access
+The project uses the `postgres` package directly instead of an ORM, keeping database operations explicit and lightweight.
 
-The service uses the `postgres` package directly instead of an ORM. This keeps database queries explicit and avoids unnecessary abstraction overhead.
+### Batch Ingestion
 
-### Batch ingestion
+Logs are inserted in batches to reduce database round trips and improve ingestion throughput.
 
-Logs are inserted in batches rather than performing one database operation per log entry. This significantly reduces database round trips during high-volume ingestion.
+### Cursor Pagination
 
-### Cursor pagination
+Pagination uses timestamp and UUID ordering instead of large SQL offsets, providing deterministic results under high-volume workloads.
 
-Cursor-based pagination avoids the performance problems associated with large SQL offsets and provides stable ordering using timestamp and UUID.
+### Precomputed Aggregates
 
-### Database-side aggregation
+Minute-level aggregates are maintained in PostgreSQL when new logs are inserted. This reduces the amount of raw log data that must be scanned for repeated aggregation queries.
 
-Aggregation is performed directly by PostgreSQL using time-bucket expressions and `COUNT(*)`, avoiding the need to load large numbers of log records into the Node.js process.
-
-### Resource-aware design
+### Resource-Aware Design
 
 The application is designed to operate under the required:
 
@@ -853,35 +596,32 @@ The application is designed to operate under the required:
 256 MB RAM
 ```
 
-resource limit.
-
-PostgreSQL is separately limited to:
+resource limit, while PostgreSQL is limited to:
 
 ```text
 1 CPU
 1 GB RAM
 ```
 
-This makes the benchmark results representative of the constraints specified for the project.
-
 ---
 
 # Project Status
 
-The implementation includes the required:
+The implementation includes:
 
-* log ingestion API
-* validation
-* partial batch acceptance
-* filtering
-* cursor pagination
-* aggregation
-* retention
+* Log ingestion
+* Validation
+* Partial batch acceptance
+* Query filters
+* Cursor pagination
+* Time-bucketed aggregation
+* Precomputed aggregates
+* Retention
 * PostgreSQL persistence
 * Docker Compose deployment
-* automated tests
+* Automated tests
 * TypeScript build
 * CI
-* benchmark validation
+* Benchmark validation
 
 The correctness benchmark currently passes all required correctness checks.
